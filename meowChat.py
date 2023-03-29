@@ -1,9 +1,8 @@
+import random
 import sys
 import os
-import io
 import queue
 from time import sleep
-import _thread
 import threading
 from threading import Lock
 
@@ -12,23 +11,72 @@ from meowChat_util.third_part import *
 from meowChat_util.render import *
 from interact import *
 
+message_queue = queue.Queue()
+stop_event=None
+message_handler_thread=None
+parser = None
 
-def worker(task_queue, stop_event):
+class chat_message:
+    def __init__(self, info):
+        self.content=""
+        self.type=""
+        self.from_string(info)
+
+    
+    def from_string(self,info):
+        """
+        parse the message from string
+        """
+        if (info[0:5] == '-sing'):
+            self.content=info[6:]
+            self.type="sing"
+        elif (info[0:5] == '-echo'):
+            self.content=info[6:]
+            self.type="echo"
+        else:
+            self.content=info
+            self.type="chat"
+        
+    def create_thread(self):
+        '''
+        convert message to thread
+        '''
+        thread=None
+        if self.type=="sing":
+            thread=threading.Thread(target=generate_song, args=(parser, self.content))
+        elif self.type=="echo":
+            thread=threading.Thread(target=generate_voice, args=(parser, self.content,'en',True))
+        else:
+            thread=threading.Thread(target=generate_voice_by_chat, args=(parser, self.content,'en',True))
+        return  thread
+
+
+def message_handler(stop_event):
+    task_list=[]
+    # 初始化计时器和上一次用户回复的时间戳
     while not stop_event.is_set():
         try:
-            task = task_queue.get(timeout=1)
+            message = message_queue.get(timeout=60)
+            task = message.create_thread()
+            task_list.append(task)
+
         except queue.Empty:
+            info=random.choice(default_greets)
+            meassage=chat_message(info)
+            task = meassage.create_thread()
+            task_list.append(task)
+            task.start()
             continue
-        print("A thread begin")
         task.start()
+        message_queue.task_done()
+
+    for task in task_list:
         task.join()
-        task_queue.task_done()
 
-
-#
-# get global arguments
-#
 def get_arguments():
+    '''
+    get global arguments
+    '''
     import argparse
     parser = argparse.ArgumentParser(description='sovits4 inference')
 
@@ -56,57 +104,40 @@ def get_arguments():
 
     return parser
 
-#
-# get user input. ignore empty input
-#
-def user_input(parser):
-    task_queue = queue.Queue()
+def init_handler():
+    global stop_event, message_handler_thread
     stop_event = threading.Event()
-    worker_thread = threading.Thread(target=worker, args=(task_queue, stop_event))
-    worker_thread.start()
+    message_handler_thread = threading.Thread(target=message_handler, args=(stop_event,))
+    message_handler_thread.start()
+    
+
+def keyborad_input():
+    '''
+    get keyborad input and set exception
+    '''
     try:
         while True:
             sys.stdout.write("user> ")
             sys.stdout.flush()
             user_input = input().strip()
-
             if user_input.lower() == "exit":
                 break
-
-            main_chat(parser,user_input,task_queue)
+            message_queue.put(chat_message(user_input))
     except KeyboardInterrupt:
         print("\nExiting due to KeyboardInterrupt...")
+    
     stop_event.set()
-    worker_thread.join()
+    message_handler_thread.join()
 
-#
-# Your main chat loop is here
-#
-def main_chat(parser,info,task_queue):
-    global REPLY_LANGUAGE
-    language = REPLY_LANGUAGE
-    if (info[0:5] == '-sing'):
-        wavefile = str.strip(info[5:])
-        sing=threading.Thread(target=generate_song, args=(parser, wavefile))
-        task_queue.put(sing)
-    elif (info[0:5] == '-echo'):
-        reply = str.strip(info[5:])
-        echo=threading.Thread(target=generate_voice, args=(parser, reply, language, True))
-        task_queue.put(echo)
-    elif (info[0:5] == '-exit'):
-        bye=threading.Thread(target=generate_voice, args=(parser, 'good bye!', language, True))
-        task_queue.put(bye)
-        sys.exit(0)
-    else:
-        chat=threading.Thread(target=generate_voice_by_chat, args=(parser, info, language, True))
-        task_queue.put(chat)
 
 
 
 def main():
-    parser = get_arguments()
+    global parser
+    parser=get_arguments()
     init_openai()
-    user_input(parser)
+    init_handler()
+    keyborad_input()
 
 # Note: you need to be using OpenAI Python v0.27.0 for the code below to work
 if __name__ == '__main__':
