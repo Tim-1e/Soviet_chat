@@ -3,8 +3,23 @@ from threading import Lock
 import inference_main 
 import re
 from meowChat_util.third_part import *
+import database as DB
 
 mutex = Lock()
+
+def extract_expression(s):
+    """
+    extract $$ expression from string
+    """
+    pattern = r'\$(.*)\$'
+    match = re.search(pattern, s)
+    if match:
+        expression = match.group(1)
+        s = re.sub(pattern, '', s)
+        return s, expression
+    else:
+        return s, None
+
 #
 # generate voice from wav file
 #
@@ -33,11 +48,21 @@ def generate_voice(parser, info, language='en', stream=False):
                                 generator=generator)
     mutex.release()
 
-def generate_voice_by_chat(parser, info, language='en', stream=False):
+def generate_voice_by_chat(parser,info,language='en', stream=False):
     reply = get_chatgpt_reply(info, language)
-    #reply=info+"this is my fake reply!but enough long for you to generate some answer and say something great for me!Please say it loudly!"
+    speech,instruct=extract_expression(reply)
     print("\nEvilia> "+reply+"\nuser> ",end="")
-    generate_voice(parser, reply, language,stream)
+    All_sppech=speech
+    db= DB.Database("evilia_private_db.db")
+    while instruct:
+        info=db.use_the_database(instruct)
+        info="database> "+info
+        print(info)
+        reply=get_chatgpt_reply(info, language)
+        print("\nEvilia> "+reply+"\nuser> ",end="")
+        speech,instruct=extract_expression(reply)
+        All_sppech+=speech
+    generate_voice(parser, All_sppech, language,stream)
     get_instructions(reply)
 
 #

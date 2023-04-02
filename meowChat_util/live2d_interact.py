@@ -1,28 +1,66 @@
-import json
 import websocket
-import threading
+import asyncio
+import json
 
-# 定义当接收到消息时的处理函数
-def on_message(ws, message):
-    print("Received message: {}".format(message))
+def send(info , port = '10086'):
+    ws = websocket.WebSocket()
+    ws.connect("ws://127.0.0.1:" + port + "/api") 
+    ws.send(info)   
+    # 关闭 WebSocket 连接
+    ws.close()
 
-# 定义当WebSocket连接成功时的处理函数
-def on_open(ws):
-    message = {
-        "msg": 13100,
-        "msgId": 1,
-        "data": 1
+def set_text(text,duration = 10000):
+    info = {
+    "msg": 11000,
+    "msgId": 1,
+    "data": {
+        "id": 0,
+        "text": text,
+        "textFrameColor": 0x000000,
+        "textColor": 0xFFFFFF,
+        "duration": duration
     }
-    ws.send(json.dumps(message))
+    }
+    send(info=str(info))
+    
+def set_expression(exp_id):
+    info = {
+    "msg": 13300,
+    "msgId": 1,
+    "data": {
+        "id": 1,
+        "expId": exp_id
+        }
+    }
+    send(info = str(info)) 
+       
+def set_next_expression():
+    info = {
+    "msg": 13301,
+    "msgId": 1,
+    "data": 0
+    }
+    send(info = str(info))
 
-# 创建一个WebSocket连接
-ws = websocket.WebSocketApp(
-    "ws://127.0.0.1:10086/api",
-    on_message=on_message,
-    on_open=on_open
-)
+def on_message(ws, message):
+    # 在这里处理收到的消息
+    print(message)
+    print("ok get message")
 
-# 启动一个新线程运行WebSocket客户端
-thread = threading.Thread(target=ws.run_forever)
-thread.start()
-thread.join()
+def on_open(ws):
+    # 在这里注册监听事件
+    info = {
+    "msg": 10000,
+    "msgId": 1
+    }
+    ws.send(json.dumps(info))
+
+def test():
+    #注册监听事件
+    ws = websocket.WebSocketApp("ws://127.0.0.1:10086/api", on_message=on_message)
+    ws.run_forever()
+
+    
+if(__name__=='__main__'):
+    test()
+    

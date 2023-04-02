@@ -89,7 +89,6 @@ def generate(parser, clean_names, output_path, stream=False, generator=None):
             #print(f"use voice lab:{spk}")
             for index, (slice_tag, data) in enumerate(audio_data):
                 #print(f'#=====segment start, {round(len(data) / audio_sr, 3)}s======!')
-
                 length = int(np.ceil(len(data) / audio_sr * svc_model.target_sample))
                 if slice_tag:
                     #print('jump empty segment')

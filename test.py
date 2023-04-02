@@ -1,50 +1,30 @@
-import threading
-import sys
-import queue
-import time
+import sqlite3
+import keyboard
 
-def print_with_exclamation(user_input):
-    time.sleep(10)
-    print(user_input + "!")
+conn = sqlite3.connect('evilia_private_db.db')
+c = conn.cursor()
+is_loop=True
+def Exit():
+    global is_loop
+    is_loop=False
+keyboard.add_hotkey('esc',Exit)
 
-def worker(task_queue, stop_event):
-    while not stop_event.is_set():
-        try:
-            task = task_queue.get(timeout=1)
-        except queue.Empty:
-            continue
-        print_with_exclamation(task)
-        task_queue.task_done()
+# 循环读取用户输入的SQLite语句，并执行
+while is_loop:
+    # 读取用户输入
+    query = input("请输入SQLite语句：")
 
-def main():
-    task_queue = queue.Queue()
-    stop_event = threading.Event()
-    worker_thread = threading.Thread(target=worker, args=(task_queue, stop_event))
-    worker_thread.start()
+    # 按下Esc键退出循环
+    if keyboard.is_pressed('q'):
+        break
 
+    # 执行SQLite语句
     try:
-        while True:
-            sys.stdout.write("user> ")
-            sys.stdout.flush()
-            user_input = input().strip()
+        c.execute(query)
+        print(c.fetchall())
+    except Exception as e:  
+        print(e)
 
-            if user_input.lower() == "exit":
-                break
-
-            task_queue.put(user_input)
-    except KeyboardInterrupt:
-        print("\nExiting due to KeyboardInterrupt...")
-
-    stop_event.set()
-    worker_thread.join()
-
-if __name__ == "__main__":
-    #main()
-    mql=queue.Queue()
-    for i in range(5):
-       sing=i
-       mql.put(sing)
-    while(not mql.empty()):
-        print(mql.get()) 
-
-    
+# 提交更改并关闭连接
+conn.commit()
+conn.close()

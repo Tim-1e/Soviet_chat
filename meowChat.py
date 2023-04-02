@@ -1,20 +1,28 @@
 import random
 import sys
 import os
+import re
 import queue
 from time import sleep
 import threading
 from threading import Lock
+import keyboard
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
-from meowChat_util.third_part import *
-from meowChat_util.render import *
-from interact import *
+sys.path.append("meowChat_util")
+import third_part
+import render
+import voice_to_text as vtt
+import database as DB
+import interact
 
 message_queue = queue.Queue()
 stop_event=None
 message_handler_thread=None
 parser = None
+is_recording=False
+micro_record=vtt.Recorder()
+evilia_db=DB.Database("evilia_private_db.db")
 
 class chat_message:
     def __init__(self, info):
@@ -36,18 +44,18 @@ class chat_message:
         else:
             self.content=info
             self.type="chat"
-        
+    
     def create_thread(self):
         '''
         convert message to thread
         '''
         thread=None
         if self.type=="sing":
-            thread=threading.Thread(target=generate_song, args=(parser, self.content))
+            thread=threading.Thread(target=interact.generate_song, args=(parser, self.content))
         elif self.type=="echo":
-            thread=threading.Thread(target=generate_voice, args=(parser, self.content,'en',True))
+            thread=threading.Thread(target=interact.generate_voice, args=(parser, self.content,'en',True))
         else:
-            thread=threading.Thread(target=generate_voice_by_chat, args=(parser, self.content,'en',True))
+            thread=threading.Thread(target=interact.generate_voice_by_chat, args=(parser, self.content,'en',True))
         return  thread
 
 
@@ -56,12 +64,11 @@ def message_handler(stop_event):
     # 初始化计时器和上一次用户回复的时间戳
     while not stop_event.is_set():
         try:
-            message = message_queue.get(timeout=60)
+            message = message_queue.get()
             task = message.create_thread()
             task_list.append(task)
-
         except queue.Empty:
-            info=random.choice(default_greets)
+            info=random.choice(third_part.default_greets)
             meassage=chat_message(info)
             task = meassage.create_thread()
             task_list.append(task)
@@ -115,6 +122,7 @@ def keyborad_input():
     '''
     get keyborad input and set exception
     '''
+    keyboard.add_hotkey("ctrl+e", voice_input)
     try:
         while True:
             sys.stdout.write("user> ")
@@ -129,16 +137,28 @@ def keyborad_input():
     stop_event.set()
     message_handler_thread.join()
 
-
-
+def voice_input():
+    '''
+    press ctrl+e to get input and press ctrl+e again to stop
+    '''
+    global is_recording
+    is_recording = not is_recording
+    if is_recording:
+        print("开始录音")
+        micro_record.start()
+    else:
+        print("录音结束")
+        micro_record.stop()
+        message_queue.put(chat_message(micro_record.result))
+        print("user> "+micro_record.result)
 
 def main():
     global parser
     parser=get_arguments()
-    init_openai()
+    third_part.init_openai()
     init_handler()
     keyborad_input()
-
+    
 # Note: you need to be using OpenAI Python v0.27.0 for the code below to work
 if __name__ == '__main__':
     main()
